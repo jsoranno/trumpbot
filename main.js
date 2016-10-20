@@ -1,0 +1,77 @@
+var auth = require('./auth.js');
+
+ar https = require('https');
+var  _ws = require('ws');
+var r = require('./responses');
+
+var counter = 1;
+var ws, slackID;
+
+https.get("https://slack.com/api/channels.create?token="
+    + auth + "&name=trump", function(res) {
+    var data = "";
+        res.on('data', function(chunk) {
+            data += chunk;
+    }).on('error', function(err) {
+        console.log("Failed to create #trump channel.");
+    }).on('end', function() {
+        console.log(data);
+    });
+});
+
+https.get("https://slack.com/api/rtm.start?token=" + auth, function(res) {
+    console.log("Connecting to Slack API...");
+    var data = "";
+    res.on('data', function(chunk) {
+        data += chunk;
+    }).on('error', function(err) {
+        console.log("Failed to connect to Slack.");
+    }).on('end', function() {
+        var rtm = JSON.parse(data);
+        ws = new _ws(rtm.url);
+        slackID = rtm.self.id;
+        console.log("Logging into " + rtm.team.name + "'s Slack...");
+        ws.on('open', function() {
+            goTrump(rtm.team.name, rtm.team.prefs.default_channels[0]);
+        });
+    })
+});
+
+
+
+function goTrump(teamName, channelID) {
+    console.log("Donald Trump has joined " + teamName + "!");
+    ws.send(JSON.stringify({
+        "id": counter,
+        "type": "message",
+        "channel": channelID,
+        "text": "LET'S MAKE " + teamName.toUpperCase() + " GREAT AGAIN."
+    }));
+    counter++;
+
+    console.log("Listening for new messages...");
+    ws.on('message', function(data) {
+        var event = JSON.parse(data);
+        if(event.type === "message" && event.user !== slackID) {
+            ws.send(JSON.stringify({
+                "id": counter,
+                "type": "message",
+                "channel": event.channel,
+                "text": getResponse(event.text)
+            }))
+        }
+        counter++;
+    });
+}
+
+function getResponse(message) {
+    for(var i = 0; i < r.length; i++) {
+        for(var j = 0; j < r[i].keywords.length; j++) {
+            if(message.toLowerCase().indexOf(r[i].keywords[j]) != -1) {
+                console.log("Responding to message: " + message);
+                return r[i].messages[Math.floor(Math.random() * r[i].messages.length)];
+            }
+        }
+    }
+}
+
